@@ -1,0 +1,143 @@
+name: Release
+
+on:
+  workflow_call:
+    secrets:
+      CI_BOT_PAT:
+        required: true
+    inputs:
+      JAVA_VERSION:
+        default: 17
+        description: Java version to use
+        required: false
+        type: string
+      FAIL_FOR_NO_CHANGES:
+        default: true
+        description: Fail if there were no changes to release
+        required: false
+        type: boolean
+      DATABASE_FILES:
+        default: ''
+        description: Whether to handle database files
+        required: false
+        type: string
+      TYPE:
+        default: ''
+        description: Type of release (service or artifact)
+        required: false
+        type: string
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      has-changes: ${{ steps.has-changes.outputs.HAS_CHANGES }}
+      release-version: ${{ steps.release-version.outputs.RELEASE_VERSION }}
+      project-name: ${{ steps.project-name.outputs.PROJECT_NAME }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.CI_BOT_PAT }}
+      - name: Set git credentials
+        run: |
+          git config --global user.name "${{ vars.CI_BOT_USERNAME }}"
+          git config --global user.email "${{ vars.CI_BOT_EMAIL }}"
+      - name: Check if there are any changes to release
+        id: has-changes
+        run: |
+          if [[ `git log -1 --pretty=%B` != *"[RELEASE] - Bump version"* ]]; then
+             echo "HAS_CHANGES=true" >> $GITHUB_OUTPUT
+          else
+             echo "HAS_CHANGES=false" >> $GITHUB_OUTPUT
+          fi
+      - name: Fail workflow if there are no changes
+        if: steps.has-changes.outputs.HAS_CHANGES == 'false' && inputs.FAIL_FOR_NO_CHANGES == true
+        run: |
+          echo "No changes to release, failing..."
+          exit 1
+      - name: Extract application name from settings.gradle.kts
+        id: project-name
+        run: |
+          NAME=$(awk -F '=' '/^rootProject\.name/{gsub(/[[:space:]]*/,"",$2); gsub(/"/,"",$2); print $2}' settings.gradle.kts)
+          if [ -z "$NAME" ]; then
+            echo "Error: No application name found in settings.gradle.kts" >&2
+            exit 1
+          fi
+          echo "PROJECT_NAME=$NAME" >> $GITHUB_OUTPUT
+          echo "Extracted application name: $NAME"
+      - name: Extract version from gradle.properties
+        id: release-version
+        run: |
+          VERSION=$(awk -F '=' '/^version[[:space:]]*=/{gsub(/[[:space:]]*/,"",$2); sub(/-SNAPSHOT$/,"",$2); print $2}' gradle.properties)
+          if [ -z "$VERSION" ]; then
+            echo "Error: No version found in gradle.properties" >&2
+            exit 1
+          fi
+          echo "RELEASE_VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted release version: $VERSION"
+      - name: Un-snapshot version and commit changes
+        run: |
+          sed -i "s/\(version\s*=\s*[0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/" gradle.properties
+          sed -i "s/\(catalog\s*=\s*[0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/" gradle.properties
+          if ! git diff --exit-code --quiet -- "gradle.properties"; then
+            git add gradle.properties
+            git commit -m "[RELEASE] - Release version: ${{ steps.release-version.outputs.RELEASE_VERSION }}"
+            git push origin master
+          else
+            echo "No changes to commit"
+          fi
+      - name: Add release tag
+        run: |
+          git_tag="v${{ steps.release-version.outputs.RELEASE_VERSION }}"
+          git tag -a "$git_tag" -m "Release version $git_tag"
+          git push origin "$git_tag"
+      - name: Archive database files and commit changes
+        if: ${{ inputs.DATABASE_FILES != '' }}
+        run: |
+          version="${{ steps.release-version.outputs.RELEASE_VERSION }}"
+          type="${{ inputs.DATABASE_FILES }}"
+          version_dir="${type}/v${version}"
+          if [ -d "$type" ] && [ -n "$(ls -A $type/*."$type" 2>/dev/null)" ]; then
+            mkdir -p "$version_dir"
+            mv "$type"/*."$type" "$version_dir/"
+            git add "$type"
+            git commit -m "[RELEASE] - Move $type files to ${version_dir}"
+            git push origin master
+          else
+            echo "No database files to process"
+          fi
+      - name: Snapshot version and commit changes
+        run: |
+          next_version=$(awk -F '.' '{print $1 "." $2+1 ".0"}' <<< "${{ steps.release-version.outputs.RELEASE_VERSION }}")
+          sed -i "s/\(version\s*=\s*\)[0-9.]*/\1${next_version}-SNAPSHOT/" gradle.properties
+          echo "Bumped version to: ${next_version}-SNAPSHOT"
+          if ! git diff --exit-code --quiet -- "gradle.properties"; then
+            git add gradle.properties
+            git commit -m "[RELEASE] - Bump version"
+            git push origin master
+          else
+            echo "No changes to commit"
+          fi
+
+  finalise-docker-images:
+    needs: release
+    if: needs.release.outputs.has-changes == 'true' && inputs.TYPE == 'service'
+    uses: ./.github/workflows/docker-image.yml
+    secrets:
+      CI_BOT_PAT: ${{ secrets.CI_BOT_PAT }}
+    with:
+      JAVA_VERSION: ${{ inputs.JAVA_VERSION }}
+      PROJECT_NAME: ${{ needs.release.outputs.project-name }}
+      PROJECT_VERSION: ${{ needs.release.outputs.release-version }}
+
+  finalise-publish-artifact:
+    needs: release
+    if: needs.release.outputs.has-changes == 'true' && inputs.TYPE == 'artifact'
+    uses: ./.github/workflows/publish-artifact.yml
+    secrets:
+      CI_BOT_PAT: ${{ secrets.CI_BOT_PAT }}
+    with:
+      JAVA_VERSION: ${{ inputs.JAVA_VERSION }}
+      PROJECT_NAME: ${{ needs.release.outputs.project-name }}
+      PROJECT_VERSION: ${{ needs.release.outputs.release-version }}
