@@ -1,0 +1,43 @@
+name: Publish Artifact
+
+on:
+  workflow_call:
+    inputs:
+      JAVA_VERSION:
+        description: Java version to use
+        required: false
+        type: string
+        default: '17'
+      PROJECT_NAME:
+        description: Project name
+        required: true
+        type: string
+      PROJECT_VERSION:
+        description: Release version
+        required: true
+        type: string
+    secrets:
+      CI_BOT_PAT:
+        required: true
+
+env:
+  REPOSITORY_USER: ${{ vars.CI_BOT_USERNAME }}
+  REPOSITORY_TOKEN: ${{ secrets.CI_BOT_PAT }}
+
+jobs:
+  publish-artifact:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: "v${{ inputs.PROJECT_VERSION }}"
+          token: ${{ secrets.CI_BOT_PAT }}
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.JAVA_VERSION }}
+          cache: 'gradle'
+      - name: Build with Gradle
+        run: ./gradlew build publish
