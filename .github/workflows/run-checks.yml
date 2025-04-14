@@ -1,0 +1,34 @@
+name: Pull request validation
+
+on:
+  workflow_call:
+    secrets:
+      CI_BOT_PAT:
+        required: true
+    inputs:
+      JAVA_VERSION:
+        default: 17
+        description: Java version to use
+        required: false
+        type: string
+
+env:
+  REPOSITORY_USER: ${{ vars.CI_BOT_USERNAME }}
+  REPOSITORY_TOKEN: ${{ secrets.CI_BOT_PAT }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.JAVA_VERSION }}
+          cache: 'gradle'
+      - name: Run Gradle build
+        run: ./gradlew build
+
+# todo add sarif upload
