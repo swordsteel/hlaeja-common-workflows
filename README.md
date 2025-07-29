@@ -5,8 +5,8 @@ GitHub actions [reusing workflows](https://docs.github.com/en/actions/using-work
 ## Actions secrets and variables
 
 ### Secrets
-- CI_BOT_PAT
+- CI_BOT_PAT = git_hub_token
 
 ### Variables
-- CI_BOT_USERNAME
-- CI_BOT_EMAIL
+- CI_BOT_USERNAME = noreply@audapi.com
+- CI_BOT_EMAIL = audapi
