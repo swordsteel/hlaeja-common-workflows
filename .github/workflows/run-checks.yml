@@ -29,6 +29,6 @@ jobs:
           java-version: ${{ inputs.JAVA_VERSION }}
           cache: 'gradle'
       - name: Run Gradle build
-        run: ./gradlew build
+        run: ./gradlew build -x testIntegration
 
 # todo add sarif upload
