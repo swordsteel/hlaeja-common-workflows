@@ -23,7 +23,7 @@ on:
         type: string
       TYPE:
         default: ''
-        description: Type of release (service, artifact, or catalog)
+        description: Type of release (service, artifact, or plugin)
         required: false
         type: string
 
@@ -151,17 +151,19 @@ jobs:
     secrets:
       CI_BOT_PAT: ${{ secrets.CI_BOT_PAT }}
     with:
+      GRADLE_TASK: publish
       JAVA_VERSION: ${{ inputs.JAVA_VERSION }}
       PROJECT_NAME: ${{ needs.release.outputs.project-name }}
       PROJECT_VERSION: ${{ needs.release.outputs.release-version }}
 
-  finalise-publish-catalog:
+  finalise-publish-plugin:
     needs: release
-    if: needs.release.outputs.has-changes == 'true' && inputs.TYPE == 'catalog'
-    uses: ./.github/workflows/publish-catalog.yml
+    if: needs.release.outputs.has-changes == 'true' && inputs.TYPE == 'plugin'
+    uses: ./.github/workflows/publish-artifact.yml
     secrets:
       CI_BOT_PAT: ${{ secrets.CI_BOT_PAT }}
     with:
+      GRADLE_TASK: publishAllPublicationsToGitHubPackagesRepository
       JAVA_VERSION: ${{ inputs.JAVA_VERSION }}
       PROJECT_NAME: ${{ needs.release.outputs.project-name }}
       PROJECT_VERSION: ${{ needs.release.outputs.release-version }}

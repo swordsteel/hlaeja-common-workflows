@@ -16,6 +16,10 @@ on:
         description: Release version
         required: true
         type: string
+      GRADLE_TASK:
+        description: Gradle task to run (e.g., 'build publish' or 'publishPluginMavenPublicationToGitHubPackagesRepository')
+        required: true
+        type: string
     secrets:
       CI_BOT_PAT:
         required: true
@@ -25,7 +29,7 @@ env:
   REPOSITORY_TOKEN: ${{ secrets.CI_BOT_PAT }}
 
 jobs:
-  publish-artifact:
+  publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,11 +37,13 @@ jobs:
           fetch-depth: 0
           ref: "v${{ inputs.PROJECT_VERSION }}"
           token: ${{ secrets.CI_BOT_PAT }}
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: ${{ inputs.JAVA_VERSION }}
           cache: 'gradle'
-      - name: Build with Gradle
-        run: ./gradlew build publish
+
+      - name: Run Gradle
+        run: ./gradlew ${{ inputs.GRADLE_TASK }}
