@@ -23,7 +23,7 @@ on:
         type: string
       TYPE:
         default: ''
-        description: Type of release (service, artifact, or plugin)
+        description: Type of release (service, artifact, plugin, or catalog)
         required: false
         type: string
 
@@ -146,7 +146,7 @@ jobs:
 
   finalise-publish-artifact:
     needs: release
-    if: needs.release.outputs.has-changes == 'true' && inputs.TYPE == 'artifact'
+    if: needs.release.outputs.has-changes == 'true' && (inputs.TYPE == 'artifact' || inputs.TYPE == 'catalog')
     uses: ./.github/workflows/publish-artifact.yml
     secrets:
       CI_BOT_PAT: ${{ secrets.CI_BOT_PAT }}
